@@ -55,7 +55,6 @@ Parser::Parser(Scanner* sc):scanner(sc) {
     }
 }
 
-// Método corregido para parsear declaraciones de variables (estilo Kotlin)
 Stm* Parser::parseVarDec() {
     bool isVal = false;
     bool isVar = false;

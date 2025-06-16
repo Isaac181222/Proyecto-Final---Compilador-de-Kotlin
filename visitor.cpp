@@ -137,6 +137,7 @@ int PrintVisitor::visit(IdentifierExp* exp) {
 void PrintVisitor::visit(AssignStatement* stm) {
     cout << stm->id << " = ";
     stm->rhs->accept(this);
+    cout << ";";  // Agregar punto y coma
 }
 
 void PrintVisitor::visit(PrintStatement* stm) {
@@ -146,7 +147,7 @@ void PrintVisitor::visit(PrintStatement* stm) {
         cout << "print(";
     }
     stm->e->accept(this);
-    cout << ")";
+    cout << ");";  // Agregar punto y coma
 }
 
 void PrintVisitor::visit(IfStatement* stm) {
@@ -195,11 +196,13 @@ void PrintVisitor::visit(VarDec* stm) {
         cout << "var " << *i << ": " << stm->type;
         if(next(i) != stm->vars.end()) cout << ", ";
     }
+    cout << ";";  // Agregar punto y coma
 }
 
 void PrintVisitor::visit(VarDecWithInit* dec) {
     cout << "var " << dec->id << ": " << dec->type << " = ";
     dec->init_value->accept(this);
+    cout << ";";  // Agregar punto y coma
 }
 
 void PrintVisitor::visit(VarDecList* stm) {
@@ -274,6 +277,7 @@ void PrintVisitor::visit(ReturnStatement* e) {
         cout << " ";
         e->e->accept(this);
     }
+    cout << ";";  // Agregar punto y coma
 }
 
 void PrintVisitor::visit(Program* p) {
