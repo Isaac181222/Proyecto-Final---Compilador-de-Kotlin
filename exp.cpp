@@ -28,7 +28,6 @@ PrintStatement::~PrintStatement() {
     delete e;
 }
 
-// Implementación de VarDecWithInit
 VarDecWithInit::VarDecWithInit(std::string id, std::string type, Exp* init)
     : id(id), type(type), init_value(init) {}
 VarDecWithInit::~VarDecWithInit() {

@@ -55,15 +55,22 @@ Parser::Parser(Scanner* sc):scanner(sc) {
     }
 }
 
+// Método corregido para parsear declaraciones de variables (estilo Kotlin)
 Stm* Parser::parseVarDec() {
-    if (!match(Token::VAR)) return nullptr;
+    bool isVal = false;
+    bool isVar = false;
+
+    if (match(Token::VAR)) {
+        isVar = true;
+    } else {
+        return nullptr;
+    }
 
     if (!match(Token::ID)) {
         cout << "Error: se esperaba un identificador después de 'var'." << endl;
         exit(1);
     }
     string varname = previous->text;
-    list<string> ids = { varname };
 
     if (!match(Token::COLON)) {
         cout << "Error: se esperaba ':' después del identificador." << endl;
@@ -84,21 +91,20 @@ Stm* Parser::parseVarDec() {
 
     Exp* init = nullptr;
     if (match(Token::ASSIGN)) {
-        init = parseExpression();  // asegúrate que parseExpression esté bien implementado
+        init = parseExpression();
     }
 
-    if (!match(Token::PC)) {
-        cout << "Error: se esperaba ';' después de la declaración de variable." << endl;
-        exit(1);
-    }
+    // No consumir punto y coma aquí, se maneja en parseStatement
 
+    // Si hay inicialización, crear VarDecWithInit
     if (init != nullptr) {
-        return new VarDecWithInit(type, varname, init);  // asegúrate de tener esta clase definida
+        return new VarDecWithInit(varname, type, init);
     }
 
+    // Si no hay inicialización, crear VarDec tradicional
+    list<string> ids = { varname };
     return new VarDec(type, ids);
 }
-
 
 VarDecList* Parser::parseVarDecList() {
     VarDecList* vdl = new VarDecList();
@@ -107,13 +113,19 @@ VarDecList* Parser::parseVarDecList() {
 
         Stm* aux = parseVarDec();
         if (aux == nullptr) {
-            // Restauramos el token si parseVarDec no era una declaración válida sin asignación
             current = saved;
             break;
         }
 
+        // Solo añadir VarDec sin inicialización a VarDecList
         if (auto* vd = dynamic_cast<VarDec*>(aux)) {
             vdl->add(vd);
+        } else {
+            // Si es VarDecWithInit, no pertenece a VarDecList
+            // Restaurar el token y salir
+            current = saved;
+            delete aux;
+            break;
         }
     }
     return vdl;
@@ -122,15 +134,20 @@ VarDecList* Parser::parseVarDecList() {
 StatementList* Parser::parseStatementList() {
     StatementList* sl = new StatementList();
     while (!check(Token::LLAVED) && !isAtEnd()) {
+        // Saltar puntos y coma sueltos
+        if (match(Token::PC)) {
+            continue;
+        }
+
         Stm* stmt = parseStatement();
         if (stmt != nullptr) {
-            cout << "[DEBUG] Añadido a StatementList: " << typeid(*stmt).name() << endl;
             sl->add(stmt);
+        } else {
+            break;
         }
     }
     return sl;
 }
-
 
 Body* Parser::parseBody() {
     expect(Token::LLAVEI);
@@ -144,11 +161,7 @@ Body* Parser::parseBody() {
 }
 
 Program* Parser::parseProgram() {
-    // En Kotlin, típicamente no hay variables globales antes de las funciones
-    // Así que creamos una lista vacía de variables globales
     VarDecList* vardecs = new VarDecList();
-
-    // Parseamos las funciones directamente
     auto fundecs = parseFunDecList();
     return new Program(vardecs, fundecs);
 }
@@ -164,6 +177,7 @@ FunDecList* Parser::parseFunDecList() {
     return vdl;
 }
 
+// Corregido para sintaxis de función Kotlin
 FunDec* Parser::parseFunDec() {
     FunDec* fd = nullptr;
 
@@ -175,7 +189,6 @@ FunDec* Parser::parseFunDec() {
             exit(1);
         }
         fd->nombre = previous->text;
-        fd->tipo = "void"; // valor por defecto
 
         if (!match(Token::PI)) {
             cout << "Error: se esperaba '(' después del nombre de la función, pero se encontró '" << current->text << "'" << endl;
@@ -192,11 +205,17 @@ FunDec* Parser::parseFunDec() {
                 exit(1);
             }
 
-            if (!match(Token::ID)) {
+            string paramType;
+            if (match(Token::TYPEINT)) {
+                paramType = "Int";
+            } else if (match(Token::TYPEFLOAT)) {
+                paramType = "Float";
+            } else if (match(Token::ID)) {
+                paramType = previous->text;
+            } else {
                 cout << "Error: se esperaba tipo del parámetro después de ':', pero se encontró '" << current->text << "'" << endl;
                 exit(1);
             }
-            string paramType = previous->text;
 
             fd->parametros.push_back(paramName);
             fd->tipos.push_back(paramType);
@@ -209,6 +228,21 @@ FunDec* Parser::parseFunDec() {
         if (!match(Token::PD)) {
             cout << "Error: se esperaba ')' al final de los parámetros, pero se encontró '" << current->text << "'" << endl;
             exit(1);
+        }
+
+        // Manejo del tipo de retorno (opcional en Kotlin)
+        if (match(Token::COLON)) {
+            if (match(Token::TYPEINT)) {
+                fd->tipo = "Int";
+            } else if (match(Token::TYPEFLOAT)) {
+                fd->tipo = "Float";
+            } else if (match(Token::ID)) {
+                fd->tipo = previous->text;
+            } else {
+                fd->tipo = "Unit"; // Tipo por defecto en Kotlin
+            }
+        } else {
+            fd->tipo = "Unit"; // Tipo por defecto en Kotlin
         }
 
         fd->cuerpo = parseBody();
@@ -227,9 +261,6 @@ list<Stm*> Parser::parseStmList() {
 }
 
 Stm* Parser::parseStatement() {
-    Token* saved = current;
-    Stm* dec = parseVarDecWithInit();
-    if (dec != nullptr) return dec;
     Stm* s = NULL;
     Exp* e = NULL;
     Body* tb = NULL;
@@ -240,45 +271,12 @@ Stm* Parser::parseStatement() {
         exit(1);
     }
 
-    if (match(Token::VAR)) {
-        if (!match(Token::ID)) {
-            cout << "Error: se esperaba identificador después de 'var'." << endl;
-            exit(1);
-        }
-        string varname = previous->text;
-
-        if (!match(Token::COLON)) {
-            cout << "Error: se esperaba ':' después del identificador." << endl;
-            exit(1);
-        }
-
-        string type;
-        if (match(Token::TYPEINT)) {
-            type = "Int";
-        } else if (match(Token::TYPEFLOAT)) {
-            type = "Float";
-        } else if (match(Token::ID)) {
-            type = previous->text;
-        } else {
-            cout << "Error: se esperaba un tipo después de ':'." << endl;
-            exit(1);
-        }
-
-        if (match(Token::ASSIGN)) {
-            Exp* expr = parseCExp();
-            if (!match(Token::PC)) {
-                cout << "Error: se esperaba ';' después de la asignación." << endl;
-                exit(1);
-            }
-            return new VarDecWithInit(varname, type, expr);
-        } else {
-            if (!match(Token::PC)) {
-                cout << "Error: se esperaba ';' después de la declaración." << endl;
-                exit(1);
-            }
-            list<string> vars = { varname };
-            return new VarDec(type, vars);
-        }
+    // Intentar parsear declaración de variable con inicialización
+    if (check(Token::VAR)) {
+        s = parseVarDec();
+        // Consumir punto y coma opcional
+        match(Token::PC);
+        return s;
     }
     else if (match(Token::ID)) {
         string lex = previous->text;
@@ -286,16 +284,11 @@ Stm* Parser::parseStatement() {
         if (match(Token::ASSIGN)) {
             e = parseCExp();
             s = new AssignStatement(lex, e);
-
-            // Expect semicolon
-            if (!match(Token::PC)) {
-                cout << "Error: se esperaba ';' después de la asignación." << endl;
-                exit(1);
-            }
+            // Consumir punto y coma opcional
+            match(Token::PC);
         }
         else if (match(Token::PI)) {
-            // This is a function call - create as FCallExp and wrap in PrintStatement
-            // Based on your exp.h, there's no FCallStatement, so we use PrintStatement for function calls
+            // Llamada a función
             FCallExp* fcall = new FCallExp();
             fcall->nombre = lex;
 
@@ -311,14 +304,10 @@ Stm* Parser::parseStatement() {
                 exit(1);
             }
 
-            // Use PrintStatement to handle function calls (as in original code)
+            // Usar PrintStatement para manejar llamadas a función
             s = new PrintStatement(fcall);
-
-            // Expect semicolon
-            if (!match(Token::PC)) {
-                cout << "Error: se esperaba ';' después de la llamada a función." << endl;
-                exit(1);
-            }
+            // Consumir punto y coma opcional
+            match(Token::PC);
         }
         else {
             return NULL;
@@ -335,12 +324,8 @@ Stm* Parser::parseStatement() {
             exit(1);
         }
         s = new PrintStatement(e, false); // false for print
-
-        // Expect semicolon
-        if (!match(Token::PC)) {
-            cout << "Error: se esperaba ';' después de print." << endl;
-            exit(1);
-        }
+        // Consumir punto y coma opcional
+        match(Token::PC);
     }
     else if (match(Token::PRINTLN)) {
         if (!match(Token::PI)) {
@@ -353,60 +338,49 @@ Stm* Parser::parseStatement() {
             exit(1);
         }
         s = new PrintStatement(e, true); // true for println
-
-        // Expect semicolon
-        if (!match(Token::PC)) {
-            cout << "Error: se esperaba ';' después de println." << endl;
-            exit(1);
-        }
+        // Consumir punto y coma opcional
+        match(Token::PC);
     }
     else if (match(Token::RETURN)) {
         ReturnStatement* rs = new ReturnStatement();
-        if (match(Token::PI)) {
-            if (!check(Token::PD)){
-                rs->e = parseCExp();
-            }
-            if (!match(Token::PD)) {
-                cout << "Error: se esperaba ')' después de return." << endl;
-                exit(1);
-            }
+        // En Kotlin, return puede no tener paréntesis
+        if (!check(Token::PC) && !check(Token::LLAVED) && !check(Token::END) && !isAtEnd()) {
+            rs->e = parseCExp();
         }
         s = rs;
-
-        // Expect semicolon
-        if (!match(Token::PC)) {
-            cout << "Error: se esperaba ';' después de return." << endl;
-            exit(1);
-        }
+        // Consumir punto y coma opcional
+        match(Token::PC);
     }
     else if (match(Token::IF)) {
+        if (!match(Token::PI)) {
+            cout << "Error: se esperaba '(' después de 'if'." << endl;
+            exit(1);
+        }
         e = parseCExp();
-        if (!match(Token::THEN)) {
-            cout << "Error: se esperaba 'then' después de la expresión." << endl;
+        if (!match(Token::PD)) {
+            cout << "Error: se esperaba ')' después de la condición del if." << endl;
             exit(1);
         }
         tb = parseBody();
         if (match(Token::ELSE)) {
             fb = parseBody();
         }
-        if (!match(Token::ENDIF)) {
-            cout << "Error: se esperaba 'end' al final de la declaración." << endl;
-            exit(1);
-        }
         s = new IfStatement(e, tb, fb);
+        // No necesita punto y coma después de estructura de control
     }
     else if (match(Token::WHILE)) {
+        if (!match(Token::PI)) {
+            cout << "Error: se esperaba '(' después de 'while'." << endl;
+            exit(1);
+        }
         e = parseCExp();
-        if (!match(Token::DO)) {
-            cout << "Error: se esperaba 'do' después de la expresión." << endl;
+        if (!match(Token::PD)) {
+            cout << "Error: se esperaba ')' después de la condición del while." << endl;
             exit(1);
         }
         tb = parseBody();
-        if (!match(Token::ENDWHILE)) {
-            cout << "Error: se esperaba 'endwhile' al final de la declaración." << endl;
-            exit(1);
-        }
         s = new WhileStatement(e, tb);
+        // No necesita punto y coma después de estructura de control
     }
     else {
         return NULL;
@@ -417,7 +391,7 @@ Stm* Parser::parseStatement() {
 
 Exp* Parser::parseCExp(){
     Exp* left = parseExpression();
-    if (match(Token::LT) || match(Token::LE) || match(Token::EQ)){
+    if (match(Token::LT) || match(Token::LE) || match(Token::EQ) || match(Token::GT) || match(Token::GE)){
         BinaryOp op;
         if (previous->type == Token::LT){
             op = LT_OP;
@@ -427,6 +401,12 @@ Exp* Parser::parseCExp(){
         }
         else if (previous->type == Token::EQ){
             op = EQ_OP;
+        }
+        else if (previous->type == Token::GT){
+            op = GT_OP;
+        }
+        else if (previous->type == Token::GE){
+            op = GE_OP;
         }
         Exp* right = parseExpression();
         left = new BinaryExp(left, right, op);
@@ -531,41 +511,3 @@ Exp* Parser::parseFactor() {
     cout << "Error: se esperaba un número o identificador." << endl;
     exit(0);
 }
-
-Stm* Parser::parseVarDecWithInit() {
-    if (!match(Token::VAR)) return nullptr;
-
-    if (!match(Token::ID)) {
-        cout << "Error: se esperaba identificador después de 'var'" << endl;
-        exit(1);
-    }
-    string name = previous->text;
-
-    if (!match(Token::COLON)) {
-        cout << "Error: se esperaba ':' después del identificador" << endl;
-        exit(1);
-    }
-
-    string type;
-    if (match(Token::TYPEINT)) {
-        type = "Int";
-    } else if (match(Token::TYPEFLOAT)) {
-        type = "Float";
-    } else {
-        cout << "Error: se esperaba tipo válido después de ':'" << endl;
-        exit(1);
-    }
-
-    if (!match(Token::ASSIGN)) {
-        cout << "[DEBUG] No se encontró '=' después de tipo. No es VarDecWithInit." << endl;
-        return nullptr;
-    }
-
-    Exp* init = parseExpression();
-
-    expect(Token::PC);  // punto y coma obligatorio
-
-    cout << "[DEBUG] Se reconoció un VarDecWithInit para: " << name << " = ... de tipo " << type << endl;
-    return new VarDecWithInit(name, type, init);
-}
-

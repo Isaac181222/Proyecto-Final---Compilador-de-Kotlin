@@ -9,7 +9,6 @@
 
 using namespace std;
 
-
 class Environment {
 private:
     vector<unordered_map<string, int>> levels;
@@ -26,6 +25,14 @@ private:
         return -1;
     }
 
+    struct VarInfo {
+        int value;
+        string type;
+        VarInfo(int v = 0, string t = "int") : value(v), type(t) {}
+    };
+
+    list<unordered_map<string, VarInfo>> env;
+
 public:
     Environment() {}
 
@@ -41,20 +48,6 @@ public:
         type_levels.push_back(t);
     }
 
-    void add_var(string var, int value, string type) {
-        if (levels.size() == 0) {
-            cout << "Environment sin niveles: no se pueden agregar variables" << endl;
-            exit(0);
-        }
-        levels.back()[var] = value;
-        type_levels.back()[var] = type;
-    }
-
-    void add_var(string var, string type) {
-        levels.back()[var] = 0;
-        type_levels.back()[var] = type;
-    }
-
     bool remove_level() {
         if (levels.size() > 0) {
             levels.pop_back();
@@ -64,45 +57,67 @@ public:
         return false;
     }
 
-
-    bool update(string x, int v) {
-        int idx = search_rib(x);
-        if (idx < 0) return false;
-        levels[idx][x] = v;
-        return true;
+    void add_var(string id, string type) {
+        env.back()[id] = VarInfo(0, type);
     }
 
-
-    bool check(string x) {
-        int idx = search_rib(x);
-        return (idx >= 0);
+    void add_var(string id, int value, string type) {
+        env.back()[id] = VarInfo(value, type);
     }
 
-    int lookup(string x) {
-        int idx = search_rib(x);
-        if (idx < 0) {
-            cout << "Variable no declarada: " << x << endl;
-            exit(0);
+    bool update(string id, int value) {
+        for (auto it = env.rbegin(); it != env.rend(); ++it) {
+            if (it->find(id) != it->end()) {
+                (*it)[id].value = value;
+                return true;
+            }
         }
-        return levels[idx][x];
+        return false;
     }
 
-    string lookup_type(string x) {
-        int idx = search_rib(x);
-        if (idx < 0) {
-            cout << "Variable no declarada: " << x << endl;
-            exit(0);
+    bool check(string id) {
+        for (auto it = env.rbegin(); it != env.rend(); ++it) {
+            if (it->find(id) != it->end()) {
+                return true;
+            }
         }
-        return type_levels[idx][x];
+        return false;
+    }
+
+    int lookup(string id) {
+        for (auto it = env.rbegin(); it != env.rend(); ++it) {
+            if (it->find(id) != it->end()) {
+                return (*it)[id].value;
+            }
+        }
+        return 0;
+    }
+
+    string getType(string id) {
+        for (auto it = env.rbegin(); it != env.rend(); ++it) {
+            if (it->find(id) != it->end()) {
+                return (*it)[id].type;
+            }
+        }
+        return "int"; // tipo por defecto
     }
 
     bool typecheck(string var, string expected_type) {
-        string actual_type = lookup_type(var);
+        string actual_type = getType(var);
         if (actual_type != expected_type) {
             cout << "Error de tipo: se esperaba " << expected_type << " pero se encontró " << actual_type << " para la variable " << var << endl;
             return false;
         }
         return true;
+    }
+
+    int lookup_type(string id) {
+        for (auto it = env.rbegin(); it != env.rend(); ++it) {
+            if (it->find(id) != it->end()) {
+                return (*it)[id].value;
+            }
+        }
+        return 0;
     }
 };
 

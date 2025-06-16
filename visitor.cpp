@@ -103,6 +103,7 @@ int VarDecWithInit::accept(Visitor* visitor) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
+// PrintVisitor Implementation
 ///////////////////////////////////////////////////////////////////////////////////
 
 int PrintVisitor::visit(BinaryExp* exp) {
@@ -194,9 +195,12 @@ void PrintVisitor::visit(VarDec* stm) {
         cout << "var " << *i << ": " << stm->type;
         if(next(i) != stm->vars.end()) cout << ", ";
     }
-    cout << ";";
 }
 
+void PrintVisitor::visit(VarDecWithInit* dec) {
+    cout << "var " << dec->id << ": " << dec->type << " = ";
+    dec->init_value->accept(this);
+}
 
 void PrintVisitor::visit(VarDecList* stm) {
     for(auto i: stm->vardecs){
@@ -208,18 +212,21 @@ void PrintVisitor::visit(VarDecList* stm) {
 
 void PrintVisitor::visit(StatementList* stm) {
     for(auto i: stm->stms){
+        cout << "   "; // Indentación para statements
         i->accept(this);
         cout << endl;
     }
 }
 
 void PrintVisitor::visit(Body* stm) {
-    if (stm->vardecs) {
+    cout << " {" << endl;
+    if (stm->vardecs && !stm->vardecs->vardecs.empty()) {
         stm->vardecs->accept(this);
     }
-    if (stm->slist) {
+    if (stm->slist && !stm->slist->stms.empty()) {
         stm->slist->accept(this);
     }
+    cout << "}";
 }
 
 int PrintVisitor::visit(FCallExp* e) {
@@ -246,29 +253,27 @@ void PrintVisitor::visit(FunDec* e) {
     }
     cout << ")";
 
-    // No imprimir tipo de retorno si es void o está vacío
-    if (!e->tipo.empty() && e->tipo != "void") {
+    // Imprimir tipo de retorno si no es Unit o void
+    if (!e->tipo.empty() && e->tipo != "void" && e->tipo != "Unit") {
         cout << ": " << e->tipo;
     }
 
-    cout << " {" << endl;
     if (e->cuerpo) e->cuerpo->accept(this);
-    cout << "}" << endl;
+    cout << endl;
 }
 
 void PrintVisitor::visit(FunDecList* e) {
     for(auto i: e->Fundecs){
         i->accept(this);
-        cout << endl;
     }
 }
 
 void PrintVisitor::visit(ReturnStatement* e) {
-    cout << "return(";
+    cout << "return";
     if (e->e != nullptr) {
+        cout << " ";
         e->e->accept(this);
     }
-    cout << ")";
 }
 
 void PrintVisitor::visit(Program* p) {
@@ -345,17 +350,29 @@ void EVALVisitor::visit(AssignStatement* stm) {
 }
 
 void EVALVisitor::visit(PrintStatement* stm) {
-    if (FloatExp* floatExp = dynamic_cast<FloatExp*>(stm->e)) {
-        cout << floatExp->value << "f";
-    } else {
-        // Para otros casos, usar tu lógica existente pero mejorada
+    // Verificar si la expresión es un identificador y obtener su tipo
+    if (IdentifierExp* idExp = dynamic_cast<IdentifierExp*>(stm->e)) {
+        string varType = env.getType(idExp->name);
         int value = stm->e->accept(this);
 
-        // Si el valor es mayor a 1000, probablemente es un float escalado
+        if (varType == "Float" || varType == "TYPEFLOAT") {
+            cout << (value / 100.0) << "f";
+        } else {
+            cout << value;
+        }
+    }
+    // Si es directamente un FloatExp
+    else if (FloatExp* floatExp = dynamic_cast<FloatExp*>(stm->e)) {
+        cout << floatExp->value << "f";
+    }
+    // Para otros casos
+    else {
+        int value = stm->e->accept(this);
+
+        // Heurística: si el valor es mayor a 1000, probablemente es un float escalado
         if (value > 1000 && value % 100 != 0) {
             cout << (value / 100.0) << "f";
         } else if (value > 1000) {
-            // Float que es número entero
             cout << (value / 100) << "f";
         } else {
             cout << value;
@@ -418,14 +435,9 @@ void EVALVisitor::visit(VarDec* stm) {
 void EVALVisitor::visit(VarDecWithInit* stm) {
     int value = stm->init_value->accept(this);
 
-    // Para floats, almacenar con información de tipo
-    if (stm->type == "Float" || stm->type == "TYPEFLOAT") {
-        env.add_var(stm->id, stm->type);
-        env.update(stm->id, value); // Ya está escalado por 100 desde FloatExp
-    } else {
-        env.add_var(stm->id, stm->type);
-        env.update(stm->id, value);
-    }
+    // Agregar la variable al entorno con su tipo
+    env.add_var(stm->id, stm->type);
+    env.update(stm->id, value);
 }
 
 void EVALVisitor::visit(VarDecList* stm) {
@@ -439,7 +451,7 @@ void EVALVisitor::visit(StatementList* stm) {
     list<Stm*>::iterator it;
     for (it = stm->stms.begin(); it != stm->stms.end(); it++) {
         (*it)->accept(this);
-        if (retcall) break; // Si se encuentra un return, salir del bucle
+        if (retcall) break;
     }
 }
 
@@ -471,7 +483,8 @@ int EVALVisitor::visit(FCallExp* e) {
 
     while (arg_it != e->argumentos.end()) {
         int value = (*arg_it)->accept(this);
-        env.add_var(*param_it, value, *type_it);
+        env.add_var(*param_it, *type_it);
+        env.update(*param_it, value);
         ++arg_it;
         ++param_it;
         ++type_it;
@@ -514,7 +527,7 @@ void EVALVisitor::visit(ReturnStatement* e) {
 void EVALVisitor::visit(Program* p) {
     env.add_level();
 
-    // Procesar declaraciones de variables si existen
+    // Procesar declaraciones de variables globales si existen
     if (p->vardecs) {
         p->vardecs->accept(this);
     }
@@ -543,9 +556,4 @@ void EVALVisitor::visit(Program* p) {
 
 void EVALVisitor::ejecutar(Program* program) {
     program->accept(this);
-}
-void PrintVisitor::visit(VarDecWithInit* dec) {
-    cout << "var " << dec->id << ": " << dec->type << " = ";
-    dec->init_value->accept(this);
-    cout << ";" << endl;
 }
