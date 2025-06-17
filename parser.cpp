@@ -55,27 +55,31 @@ Parser::Parser(Scanner* sc):scanner(sc) {
     }
 }
 
+
+
 Stm* Parser::parseVarDec() {
-    bool isVal = false;
     bool isVar = false;
 
-    if (match(Token::VAR)) {
+    if (match(Token::VAR)) {  // Si es "var"
         isVar = true;
     } else {
         return nullptr;
     }
 
+    // Se espera un identificador (nombre de variable)
     if (!match(Token::ID)) {
-        cout << "Error: se esperaba un identificador después de 'var'." << endl;
+        cout << "Error: se esperaba un identificador después de 'var'. Token actual: '" << current->text << "'" << endl;
         exit(1);
     }
     string varname = previous->text;
 
+    // Se espera ":" para especificar el tipo
     if (!match(Token::COLON)) {
         cout << "Error: se esperaba ':' después del identificador." << endl;
         exit(1);
     }
 
+    // Se espera un tipo: Int o Float
     string type;
     if (match(Token::TYPEINT)) {
         type = "Int";
@@ -84,7 +88,8 @@ Stm* Parser::parseVarDec() {
     } else if (match(Token::ID)) {
         type = previous->text;
     } else {
-        cout << "Error: se esperaba un tipo después de ':'." << endl;
+        cout << "Error: se esperaba un tipo después de ':'. Token actual: '"
+             << current->text << "' (tipo: " << current->type << ")" << endl;
         exit(1);
     }
 
@@ -93,14 +98,11 @@ Stm* Parser::parseVarDec() {
         init = parseExpression();
     }
 
-    // No consumir punto y coma aquí, se maneja en parseStatement
-
     // Si hay inicialización, crear VarDecWithInit
     if (init != nullptr) {
         return new VarDecWithInit(varname, type, init);
     }
 
-    // Si no hay inicialización, crear VarDec tradicional
     list<string> ids = { varname };
     return new VarDec(type, ids);
 }
@@ -110,10 +112,10 @@ VarDecList* Parser::parseVarDecList() {
     while (true) {
         Token* saved = current;
 
-        Stm* aux = parseVarDec();
-        if (aux == nullptr) {
+        Stm* aux = parseVarDec();  // Intentar parsear una declaración de variable
+        if (aux == nullptr) {  // Si no se encuentra una declaración válida, salir
             current = saved;
-            break;
+            break;  // Salir del bucle
         }
 
         // Solo añadir VarDec sin inicialización a VarDecList
@@ -138,6 +140,26 @@ StatementList* Parser::parseStatementList() {
             continue;
         }
 
+        // Primero intentar parsear declaración de variable con inicialización
+        if (check(Token::VAR)) {
+            Stm* varStmt = parseVarDec();
+            if (varStmt != nullptr) {
+                // Solo agregar VarDecWithInit a StatementList
+                if (dynamic_cast<VarDecWithInit*>(varStmt)) {
+                    sl->add(varStmt);
+                    match(Token::PC); // Consumir punto y coma opcional
+
+                    continue;
+                } else {
+                    // Si es VarDec sin inicialización, no debería estar aquí
+                    delete varStmt;
+                    break;
+                }
+            } else {
+                cout << "Debug: parseVarDec retornó nullptr" << endl;
+            }
+        }
+
         Stm* stmt = parseStatement();
         if (stmt != nullptr) {
             sl->add(stmt);
@@ -150,9 +172,8 @@ StatementList* Parser::parseStatementList() {
 
 Body* Parser::parseBody() {
     expect(Token::LLAVEI);
-
-    VarDecList* vardecs = parseVarDecList();         // sin inicialización
-    StatementList* slist = parseStatementList();     // con inicialización, prints, etc.
+    StatementList* slist = parseStatementList();
+    VarDecList* vardecs = parseVarDecList();
 
     expect(Token::LLAVED);
 
@@ -176,7 +197,6 @@ FunDecList* Parser::parseFunDecList() {
     return vdl;
 }
 
-// Corregido para sintaxis de función Kotlin
 FunDec* Parser::parseFunDec() {
     FunDec* fd = nullptr;
 
@@ -270,14 +290,8 @@ Stm* Parser::parseStatement() {
         exit(1);
     }
 
-    // Intentar parsear declaración de variable con inicialización
-    if (check(Token::VAR)) {
-        s = parseVarDec();
-        // Consumir punto y coma opcional
-        match(Token::PC);
-        return s;
-    }
-    else if (match(Token::ID)) {
+    // NO parsear declaración de variable aquí - se maneja en parseStatementList
+    if (match(Token::ID)) {
         string lex = previous->text;
 
         if (match(Token::ASSIGN)) {

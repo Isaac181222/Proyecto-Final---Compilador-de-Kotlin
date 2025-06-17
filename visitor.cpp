@@ -20,6 +20,10 @@ int NumberExp::accept(Visitor* visitor) {
     return visitor->visit(this);
 }
 
+int FloatExp::accept(Visitor* visitor) {
+    return visitor->visit(this);
+}
+
 int BoolExp::accept(Visitor* visitor) {
     return visitor->visit(this);
 }
@@ -151,23 +155,21 @@ void PrintVisitor::visit(PrintStatement* stm) {
 }
 
 void PrintVisitor::visit(IfStatement* stm) {
-    cout << "if ";
+    cout << "if (";
     stm->condition->accept(this);
-    cout << " then" << endl;
+    cout << ")";
     stm->then->accept(this);
     if(stm->els){
-        cout << "else" << endl;
+        cout << " else";
         stm->els->accept(this);
     }
-    cout << "endif";
 }
 
 void PrintVisitor::visit(WhileStatement* stm) {
-    cout << "while ";
+    cout << "while (";
     stm->condition->accept(this);
-    cout << " do" << endl;
+    cout << ")";
     stm->b->accept(this);
-    cout << "endwhile";
 }
 
 void PrintVisitor::visit(ForStatement* stm) {
@@ -248,20 +250,27 @@ void PrintVisitor::visit(FunDec* e) {
     auto param_it = e->parametros.begin();
     auto type_it = e->tipos.begin();
 
+    // Imprimir los parámetros y sus tipos
     while (param_it != e->parametros.end()) {
         cout << *param_it << ": " << *type_it;
         ++param_it;
         ++type_it;
-        if (param_it != e->parametros.end()) cout << ", ";
+        if (param_it != e->parametros.end()) {
+            cout << ", ";
+        }
     }
+
     cout << ")";
 
-    // Imprimir tipo de retorno si no es Unit o void
+    // Imprimir el tipo de retorno (si es diferente de "Unit" o "void")
     if (!e->tipo.empty() && e->tipo != "void" && e->tipo != "Unit") {
         cout << ": " << e->tipo;
     }
 
-    if (e->cuerpo) e->cuerpo->accept(this);
+    // Imprimir el cuerpo de la función si existe
+    if (e->cuerpo) {
+        e->cuerpo->accept(this);
+    }
     cout << endl;
 }
 

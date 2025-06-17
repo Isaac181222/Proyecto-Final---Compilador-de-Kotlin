@@ -48,9 +48,6 @@ WhileStatement::~WhileStatement() {
 
 FloatExp::FloatExp(float v): value(v) {}
 FloatExp::~FloatExp() {}
-int FloatExp::accept(Visitor* visitor) {
-    return visitor->visit(this);
-}
 
 VarDec::VarDec(string type, list<string> ids): type(type), vars(ids) {}
 VarDec::~VarDec() {}

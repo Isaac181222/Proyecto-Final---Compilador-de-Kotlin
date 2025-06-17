@@ -1,11 +1,14 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include <vector>
 #include "scanner.h"
 #include "exp.h"
+#include "token.h"
 
 class Parser {
 private:
+    vector<Token> tokens;
     Scanner* scanner;
     Token *current, *previous;
     bool match(Token::Type ttype);
@@ -29,6 +32,7 @@ public:
     FunDecList* parseFunDecList();
     FunDec* parseFunDec();
     Stm* parseVarDecWithInit();
+    Parser(const vector<Token>& tokens) : tokens(tokens) {}
 };
 
 #endif // PARSER_H
