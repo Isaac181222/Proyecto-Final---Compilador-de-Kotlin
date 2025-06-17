@@ -1,0 +1,7 @@
+fun main() {
+    var x: Int = 10;
+    var z: Int = 15;
+    z = 20;
+    println(z);
+    println(x);
+}
